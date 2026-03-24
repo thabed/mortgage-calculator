@@ -51,6 +51,50 @@ export function totalInterestEstimate(principal, effRate, totalYears) {
   return mp * totalYears * 12 - principal;
 }
 
+/**
+ * Outstanding principal after monthsElapsed payments on a standard annuity loan.
+ * Allows penalty and savings calculations to use the declining balance at each
+ * potential switch month rather than the original principal.
+ *
+ * @param {number} principal
+ * @param {number} annualRate    - decimal (e.g. 0.0875)
+ * @param {number} totalYears    - remaining amortisation term at the start
+ * @param {number} monthsElapsed
+ * @returns {number} Outstanding balance (≥ 0)
+ */
+export function remainingBalance(principal, annualRate, totalYears, monthsElapsed) {
+  if (monthsElapsed <= 0) return principal;
+  if (annualRate <= 0) {
+    const n = Math.round(totalYears * 12);
+    return Math.max(0, principal * (1 - monthsElapsed / n));
+  }
+  const r  = annualRate / 12;
+  const n  = Math.round(totalYears * 12);
+  const mp = principal * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1);
+  return Math.max(0, principal * Math.pow(1 + r, monthsElapsed)
+                   - mp * (Math.pow(1 + r, monthsElapsed) - 1) / r);
+}
+
+/**
+ * Outstanding NOMINAL principal for an index-linked (verðtryggð) loan.
+ *
+ * For these loans the outstanding balance is CPI-indexed, so it can grow in
+ * nominal terms during the early years even as the real balance amortises.
+ * Formula: real_remaining(m) × (1 + inflation)^(m / 12)
+ *
+ * @param {number} principal      - current nominal outstanding balance
+ * @param {number} realRate       - real annual interest rate (decimal), NOT effective
+ * @param {number} inflation      - expected annual inflation (decimal)
+ * @param {number} totalYears
+ * @param {number} monthsElapsed
+ * @returns {number} Nominal outstanding balance after monthsElapsed months
+ */
+export function remainingBalanceIndexed(principal, realRate, inflation, totalYears, monthsElapsed) {
+  if (monthsElapsed <= 0) return principal;
+  const realRemaining = remainingBalance(principal, realRate, totalYears, monthsElapsed);
+  return realRemaining * Math.pow(1 + inflation, monthsElapsed / 12);
+}
+
 /* ─────────────────────────────────────────────────────────────────────────────
    SINGLE SWITCH
 ───────────────────────────────────────────────────────────────────────────── */
@@ -75,19 +119,36 @@ export function calcSingleSwitch(p) {
   const totalMonths   = Math.round(p.yearsLeft * 12);
   const effCurrent    = effectiveRate(p.currentRate,  p.currentType,  p.inflationCurrent);
   const effNew        = effectiveRate(p.newRate,       p.newRateType,  p.inflationA);
-  const monthlySaving = p.principal * (effCurrent - effNew) / 12;
+
+  // monthlySaving at m=0 — used for display and verdict text
+  const monthlySaving = monthlyPayment(p.principal, effCurrent, p.totalTerm)
+                      - monthlyPayment(p.principal, effNew,     p.totalTerm);
 
   const rows = [];
   let bestMonth = 0, bestNet = -Infinity, firstPositive = -1;
 
   for (let m = 0; m <= totalMonths; m++) {
     const yearsRemaining = p.yearsLeft - m / 12;
-    const penalty        = p.principal * p.penaltyRate * Math.max(yearsRemaining, 0);
-    const switchCost     = penalty + p.setupFee;
-    const savings        = monthlySaving * (totalMonths - m);
-    const net            = savings - switchCost;
 
-    if (net > bestNet)              { bestNet = net; bestMonth = m; }
+    // Actual outstanding balance at month m.
+    // For index-linked loans the nominal balance can grow in early years
+    // (CPI indexation outpaces real amortisation), so we use the indexed formula.
+    const P_m = p.currentType === 'index'
+      ? remainingBalanceIndexed(p.principal, p.currentRate, p.inflationCurrent, p.totalTerm, m)
+      : remainingBalance(p.principal, effCurrent, p.totalTerm, m);
+
+    const penalty    = P_m * p.penaltyRate * Math.max(yearsRemaining, 0);
+    const switchCost = penalty + p.setupFee;
+
+    // Monthly saving if we switch at month m, using the actual remaining balance
+    // and remaining amortisation term at that point.
+    const remYears = Math.max(p.totalTerm - m / 12, 1 / 12);
+    const mSaving  = monthlyPayment(P_m, effCurrent, remYears)
+                   - monthlyPayment(P_m, effNew,     remYears);
+    const savings  = mSaving * (totalMonths - m);
+    const net      = savings - switchCost;
+
+    if (net > bestNet)                   { bestNet = net; bestMonth = m; }
     if (net > 0 && firstPositive === -1) { firstPositive = m; }
 
     rows.push({ m, switchCost, savings, net, yearsRemaining });
@@ -118,17 +179,27 @@ export function calcDoubleSwitch(p) {
   const effNew     = effectiveRate(p.newRate,      p.newRateType,  p.inflationA);
   const effNew2    = effectiveRate(p.rate2,        p.rateType2,    p.inflationB);
 
-  const saving1 = p.principal * (effCurrent - effNew)  / 12;
-  const saving2 = p.principal * (effCurrent - effNew2) / 12;
+  // Outstanding nominal balance at month M2 (zero-delay first switch uses p.principal)
+  const P_M2 = p.currentType === 'index'
+    ? remainingBalanceIndexed(p.principal, p.currentRate, p.inflationCurrent, p.totalTerm, M2)
+    : remainingBalance(p.principal, effCurrent, p.totalTerm, M2);
 
-  // Cost of first switch (today)
+  // Monthly savings computed from actual payment differences
+  const saving1 = monthlyPayment(p.principal, effCurrent, p.totalTerm)
+                - monthlyPayment(p.principal, effNew,     p.totalTerm);
+
+  const remTermAtM2 = Math.max(p.totalTerm - M2 / 12, 1 / 12);
+  const saving2 = monthlyPayment(P_M2, effCurrent, remTermAtM2)
+                - monthlyPayment(P_M2, effNew2,    remTermAtM2);
+
+  // Cost of first switch (today) — penalty uses current outstanding balance (m = 0)
   const cost1 = p.principal * p.penaltyRate * p.yearsLeft + p.setupFee;
 
-  // Penalty for breaking Option A at month M2
+  // Penalty for breaking Option A at month M2 — uses P_M2 (the indexed balance)
   const fixedTermA       = p.newRateType === 'fixed' ? p.newFixedTerm : p.yearsLeft;
   const yearsLeftOnA     = fixedTermA - M2 / 12;
   const penalty2         = yearsLeftOnA > 0
-    ? p.principal * p.penaltyRateNew * yearsLeftOnA
+    ? P_M2 * p.penaltyRateNew * yearsLeftOnA
     : 0;
   const cost2            = penalty2 + p.setupFee2;
 
@@ -199,10 +270,18 @@ export function buildScenarios(p, single, dbl, totalMonths) {
     const M2            = dbl.M2;
     const effCurrent    = effectiveRate(p.currentRate, p.currentType, p.inflationCurrent);
     const effB          = effectiveRate(p.rate2, p.rateType2, p.inflationB);
-    const savingBOnly   = p.principal * (effCurrent - effB) / 12;
+
+    // Use the amortised / indexed balance at month M2 for the penalty and savings
+    const P_M2b = p.currentType === 'index'
+      ? remainingBalanceIndexed(p.principal, p.currentRate, p.inflationCurrent, p.totalTerm, M2)
+      : remainingBalance(p.principal, effCurrent, p.totalTerm, M2);
+
     const yearsLeftAtM2 = Math.max(p.yearsLeft - M2 / 12, 0);
-    const penaltyBOnly  = yearsLeftAtM2 * p.principal * p.penaltyRate;
+    const penaltyBOnly  = P_M2b * p.penaltyRate * yearsLeftAtM2;
     const costBOnly     = penaltyBOnly + p.setupFee2;
+    const remTermAtM2b  = Math.max(p.totalTerm - M2 / 12, 1 / 12);
+    const savingBOnly   = monthlyPayment(P_M2b, effCurrent, remTermAtM2b)
+                        - monthlyPayment(P_M2b, effB,       remTermAtM2b);
     const netBOnly      = savingBOnly * (totalMonths - M2) - costBOnly;
 
     scenarios.push({
