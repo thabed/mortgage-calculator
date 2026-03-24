@@ -1,0 +1,47 @@
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS
+   Húsnæðislán · Mortgage Switch Calculator
+═══════════════════════════════════════════════ */
+
+:root {
+  /* Palette */
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #1c2128;
+  --border:    #21262d;
+  --border2:   #30363d;
+
+  /* Semantic colours */
+  --accent:    #3fb950;   /* green  — positive / go */
+  --accent2:   #f0883e;   /* orange — warning / best-month */
+  --accent3:   #58a6ff;   /* blue   — option A */
+  --purple:    #bc8cff;   /* purple — option B */
+  --yellow:    #e3b341;   /* yellow — caution */
+  --red:       #f85149;   /* red    — negative / cost */
+  --green:     #3fb950;
+  --teal:      #39d353;
+
+  /* Text */
+  --text:      #e6edf3;
+  --muted:     #8b949e;
+
+  /* Typography */
+  --font-serif: 'DM Serif Display', serif;
+  --font-mono:  'DM Mono', monospace;
+
+  /* Spacing scale */
+  --sp-xs:  4px;
+  --sp-sm:  8px;
+  --sp-md:  16px;
+  --sp-lg:  24px;
+  --sp-xl:  40px;
+  --sp-2xl: 64px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+
+  /* Transitions */
+  --t-fast: 0.15s ease;
+  --t-med:  0.25s ease;
+}

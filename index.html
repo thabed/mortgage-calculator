@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Model mortgage switching decisions for the Icelandic housing market — penalties, fees, index-linked loans, and double-switch strategies.">
+
+  <title>Húsnæðislán · Mortgage Switch Calculator</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+
+  <!-- Styles (load order matters: tokens → layout → components) -->
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+
+  <!-- Chart.js (CDN, loaded before our modules) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+</head>
+<body>
+<div class="container">
+
+  <!-- ══════════════════════════════════════════════════
+       HEADER
+  ══════════════════════════════════════════════════ -->
+  <header>
+    <div class="eyebrow">Húsnæðislán · Mortgage Analysis · ISK</div>
+    <h1>Should you <em>switch</em><br>your mortgage?</h1>
+    <p class="subtitle">
+      Model a single switch or a double switch — weighing penalties, fees, index-linking,
+      inflation, and variable vs. fixed rates. Designed for the Icelandic housing market.
+    </p>
+  </header>
+
+  <!-- Sticky summary bar -->
+  <div class="sticky-bar" id="stickyBar">
+    <div class="sticky-item">
+      <div class="sticky-label">Annual saving</div>
+      <div class="sticky-val" id="sAnnual">—</div>
+    </div>
+    <div class="sticky-item">
+      <div class="sticky-label">Cost today</div>
+      <div class="sticky-val neg" id="sCost">—</div>
+    </div>
+    <div class="sticky-item">
+      <div class="sticky-label">Break-even</div>
+      <div class="sticky-val neu" id="sBreak">—</div>
+    </div>
+    <div class="sticky-item">
+      <div class="sticky-label">Net gain</div>
+      <div class="sticky-val" id="sNet">—</div>
+    </div>
+    <div class="sticky-item">
+      <div class="sticky-label">Verdict</div>
+      <div class="sticky-val" id="sVerdict">—</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       INPUTS — CURRENT MORTGAGE
+  ══════════════════════════════════════════════════ -->
+  <div class="section-title">Your Current Mortgage</div>
+
+  <div class="input-section">
+    <div class="section-header">
+      <h3>Current Mortgage</h3>
+      <span class="badge current">Active</span>
+    </div>
+    <div class="inputs-grid">
+
+      <div class="input-group">
+        <label for="principal">Principal (ISK)</label>
+        <input type="number" id="principal" value="45000000" step="1000000" min="0">
+        <span class="input-hint">Current outstanding balance</span>
+      </div>
+
+      <div class="input-group">
+        <label for="currentRate">Current Rate (%)</label>
+        <input type="number" id="currentRate" value="8.75" step="0.05" min="0">
+      </div>
+
+      <div class="input-group">
+        <label for="yearsLeft">Years left on fixed rate</label>
+        <input type="number" id="yearsLeft" value="4" min="0.5" max="30" step="0.5">
+      </div>
+
+      <div class="input-group">
+        <label for="penaltyRate">Penalty rate (% × years left)</label>
+        <input type="number" id="penaltyRate" value="0.20" step="0.05" min="0">
+        <span class="input-hint">Typically 0.10–0.50% per remaining year</span>
+      </div>
+
+      <div class="input-group">
+        <label for="currentType">Loan type</label>
+        <select id="currentType">
+          <option value="fixed">Fixed rate</option>
+          <option value="variable">Variable rate</option>
+          <option value="index">Index-linked (verðtryggð)</option>
+        </select>
+      </div>
+
+      <div class="input-group" id="currentInflationGroup" style="display:none">
+        <label for="inflationRate">Current inflation (%/yr)</label>
+        <input type="number" id="inflationRate" value="5.5" step="0.1" min="0">
+        <span class="input-hint">Added to nominal rate for effective cost</span>
+      </div>
+
+      <div class="input-group">
+        <label for="totalTerm">Total loan term (years)</label>
+        <input type="number" id="totalTerm" value="25" min="5" max="40" step="1">
+        <span class="input-hint">Used for amortisation &amp; interest estimates</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       INPUTS — FIRST SWITCH (OPTION A)
+  ══════════════════════════════════════════════════ -->
+  <div class="section-title">First Switch Target</div>
+
+  <div class="input-section">
+    <div class="section-header">
+      <h3>Option A</h3>
+      <span class="badge switch1">First Switch</span>
+    </div>
+    <div class="inputs-grid">
+
+      <div class="input-group">
+        <label for="setupFee">New mortgage fee (ISK)</label>
+        <input type="number" id="setupFee" value="70000" step="10000" min="0">
+        <span class="input-hint">Registration + lender setup fees</span>
+      </div>
+
+      <div class="input-group">
+        <label for="newRate">New rate (%)</label>
+        <input type="number" id="newRate" value="7.95" step="0.05" min="0">
+      </div>
+
+      <div class="input-group">
+        <label for="newRateType">Rate type</label>
+        <select id="newRateType">
+          <option value="fixed">Fixed rate</option>
+          <option value="variable">Variable rate</option>
+          <option value="index">Index-linked (verðtryggð)</option>
+        </select>
+      </div>
+
+      <div class="input-group" id="newFixedTermGroup">
+        <label for="newFixedTerm">Fixed term (years)</label>
+        <input type="number" id="newFixedTerm" value="5" min="1" max="20" step="1">
+      </div>
+
+      <div class="input-group" id="newPenaltyGroup">
+        <label for="penaltyRateNew">Penalty rate (% × years left)</label>
+        <input type="number" id="penaltyRateNew" value="0.20" step="0.05" min="0">
+      </div>
+
+      <div class="input-group" id="newInflationGroup" style="display:none">
+        <label for="inflationA">Expected inflation for A (%/yr)</label>
+        <input type="number" id="inflationA" value="4.0" step="0.1" min="0">
+        <span class="input-hint">Adds to real cost of index-linked loan</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       INPUTS — SECOND SWITCH (OPTION B, TOGGLE)
+  ══════════════════════════════════════════════════ -->
+  <div class="input-section">
+    <div class="toggle-row" id="toggleRow2" role="button" tabindex="0" aria-label="Toggle second switch">
+      <div class="toggle" id="toggle2" aria-hidden="true"></div>
+      <span class="toggle-label">Model a second switch in the future</span>
+    </div>
+
+    <div class="collapsible" id="secondSwitchInputs">
+      <div class="section-header" style="margin-bottom:16px">
+        <h3>Option B</h3>
+        <span class="badge switch2">Second Switch</span>
+      </div>
+      <div class="inputs-grid">
+
+        <div class="input-group">
+          <label for="switchMonth2">Switch at month #</label>
+          <input type="number" id="switchMonth2" value="24" min="1" step="1">
+          <span class="input-hint">Months after switching to Option A</span>
+        </div>
+
+        <div class="input-group">
+          <label for="setupFee2">New mortgage fee (ISK)</label>
+          <input type="number" id="setupFee2" value="70000" step="10000" min="0">
+        </div>
+
+        <div class="input-group">
+          <label for="rate2">Rate after 2nd switch (%)</label>
+          <input type="number" id="rate2" value="6.00" step="0.05" min="0">
+        </div>
+
+        <div class="input-group">
+          <label for="rateType2">Rate type (Option B)</label>
+          <select id="rateType2">
+            <option value="fixed">Fixed rate</option>
+            <option value="variable">Variable rate</option>
+            <option value="index">Index-linked (verðtryggð)</option>
+          </select>
+        </div>
+
+        <div class="input-group" id="fixedTerm2Group">
+          <label for="fixedTerm2">Fixed term (years)</label>
+          <input type="number" id="fixedTerm2" value="5" min="1" max="20" step="1">
+        </div>
+
+        <div class="input-group">
+          <label for="penaltyRate2">Penalty rate (% × years left)</label>
+          <input type="number" id="penaltyRate2" value="0.20" step="0.05" min="0">
+        </div>
+
+        <div class="input-group" id="inflationB_group" style="display:none">
+          <label for="inflationB">Expected inflation for B (%/yr)</label>
+          <input type="number" id="inflationB" value="3.0" step="0.1" min="0">
+        </div>
+
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.7">
+        ℹ The second switch assumes you first switch to Option A (starting a new fixed term),
+        then break that and switch to Option B at the specified month. The penalty at that point
+        is calculated against Option A's remaining fixed years.
+      </p>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════
+       RESULTS
+  ══════════════════════════════════════════════════ -->
+  <div class="section-title" id="resultsAnchor">Results</div>
+
+  <!-- Summary cards -->
+  <div class="grid4" id="summaryCards"></div>
+
+  <!-- Verdict -->
+  <div id="verdictBox" class="verdict">
+    <h3 id="verdictTitle"></h3>
+    <p id="verdictText"></p>
+  </div>
+
+  <!-- Rate comparison -->
+  <div class="panel" id="ratePanel">
+    <h3>Rate Comparison</h3>
+    <p class="panel-sub">Effective annual cost — including inflation adjustment for index-linked loans</p>
+    <div class="rate-compare" id="rateCompare"></div>
+    <div class="chip-row" id="loanChips"></div>
+  </div>
+
+  <!-- Charts -->
+  <div class="section-title">Visual Breakdown</div>
+
+  <div class="grid-charts">
+    <div class="chart-box">
+      <h4>Cumulative Net Savings</h4>
+      <div class="chart-sub">Net position vs. staying on your current mortgage</div>
+      <div class="chart-wrap"><canvas id="chartCumulative"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4>Monthly Payment Comparison</h4>
+      <div class="chart-sub">Estimated monthly outflow (principal + interest, nominal)</div>
+      <div class="chart-wrap"><canvas id="chartPayments"></canvas></div>
+    </div>
+  </div>
+
+  <div class="grid-charts">
+    <div class="chart-box">
+      <h4>Break-Even Analysis</h4>
+      <div class="chart-sub">When cumulative savings exceed switching costs</div>
+      <div class="chart-wrap"><canvas id="chartBreakeven"></canvas></div>
+    </div>
+    <div class="chart-box">
+      <h4>Total Interest Over Loan Life</h4>
+      <div class="chart-sub">Estimated total interest paid under each scenario</div>
+      <div class="chart-wrap"><canvas id="chartInterest"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Strategy comparison table (shown only with Option B enabled) -->
+  <div class="panel" id="compSection" style="display:none">
+    <h3>Strategy Comparison</h3>
+    <p class="panel-sub">All strategies measured over your current fixed-rate window</p>
+    <table class="comp-table" id="compTable"></table>
+  </div>
+
+  <!-- Month-by-month timeline -->
+  <div class="panel">
+    <h3>Month-by-Month Breakdown</h3>
+    <p class="panel-sub">Cumulative net position vs. staying on current rate</p>
+    <div class="tab-nav" id="tabNav"></div>
+    <div class="timeline">
+      <div class="timeline-row header">
+        <span>Month</span>
+        <span>Net savings bar</span>
+        <span>Switch cost</span>
+        <span>Status</span>
+        <span>Cumulative</span>
+      </div>
+      <div id="timelineRows"></div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- Application (ES modules — Chart.js must be loaded first, hence defer above) -->
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
