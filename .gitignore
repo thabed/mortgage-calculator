@@ -10,6 +10,8 @@ Thumbs.db
 
 # Local dev
 *.log
+__pycache__/
+*.pyc
 
 # Reporter — personal data, never commit
 reporter/config.json
