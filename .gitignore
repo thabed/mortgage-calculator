@@ -10,3 +10,9 @@ Thumbs.db
 
 # Local dev
 *.log
+
+# Reporter — personal data, never commit
+reporter/config.json
+reporter/rates_cache.json
+reporter/report_preview.html
+reporter/schedule.json
